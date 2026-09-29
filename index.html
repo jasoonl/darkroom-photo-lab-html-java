@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Darkroom Photo Lab</title>
+<meta name="description" content="Darkroom: a retro photo lab in your browser. Fujifilm, Sony, Canon, Nikon and film looks, a full developer, frames, date stamps and full-resolution export. Photos never leave your device.">
+<meta name="theme-color" content="#18181b">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600;700&amp;family=Caveat:wght@400;600&amp;family=VT323&amp;display=swap">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div id="dc-root"></div>
+
+<template id="dc-template">
+<div class="app" tabindex="0" onKeyDown="{{v.onKey}}">
+  <header class="top">
+    <div class="brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m14.31 8 5.74 9.94"></path><path d="M9.69 8h11.48"></path><path d="m7.38 12 5.74-9.94"></path><path d="M9.69 16 3.95 6.06"></path><path d="M14.31 16H2.83"></path><path d="m16.62 12-5.74 9.94"></path></svg><span>Darkroom</span></div>
+    <div class="meta"><b>{{v.title}}</b><span>{{v.subtitle}}</span></div>
+    <div class="acts">
+      <button class="btn btn-ghost btn-icon" aria-label="Undo" title="Undo (Ctrl+Z)" onClick="{{v.undo}}" disabled="{{v.noUndo}}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg></button>
+      <button class="btn btn-ghost btn-icon" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" onClick="{{v.redo}}" disabled="{{v.noRedo}}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"></path><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"></path></svg></button>
+      <div class="sep dsk"></div>
+      <button class="btn btn-outline dsk" onClick="{{v.pickFiles}}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>Import</button>
+      <button class="btn btn-primary" onClick="{{v.goExport}}" disabled="{{v.noPhoto}}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" x2="12" y1="15" y2="3"></line></svg>Export</button>
+    </div>
+  </header>
+
+  <main class="body">
+    <aside class="panel looks {{v.looksCls}}" aria-label="Looks">
+      <div class="phead">
+        <div class="prow ttl">
+          <h2 class="ptitle">Looks</h2>
+          <button class="btn btn-ghost btn-sm" onClick="{{v.shuffle}}" disabled="{{v.noPhoto}}" title="Try a random look"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 14 4 4-4 4"></path><path d="m18 2 4 4-4 4"></path><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"></path><path d="M2 6h1.4c1.3 0 2.5.6 3.3 1.7l.9 1.2"></path><path d="M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8"></path></svg>Shuffle</button>
+        </div>
+        <label class="search"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input class="txt" type="search" placeholder="Search looks" aria-label="Search looks" value="{{v.q}}" onChange="{{v.onSearch}}"></label>
+        <div class="chips" role="tablist" aria-label="Look categories">
+          <sc-for list="{{v.chips}}" as="c" hint-placeholder-count="8">
+            <button class="chip {{c.cls}}" role="tab" aria-selected="{{c.sel}}" onClick="{{c.pick}}">{{c.label}}</button>
+          </sc-for>
+        </div>
+        <sc-if value="{{v.brandBanner}}" hint-placeholder-val="{{false}}">
+          <div class="banner"><div>Shot on <b>{{v.camera}}</b></div><button class="btn btn-outline btn-sm" onClick="{{v.showBrand}}">{{v.brandLabel}}</button></div>
+        </sc-if>
+        <sc-if value="{{v.hasPhoto}}" hint-placeholder-val="{{false}}">
+          <div class="active-look">
+            <div class="prow"><b>{{v.lookName}}</b><span>{{v.amountLabel}}</span><button class="btn btn-ghost btn-icon btn-sm" aria-label="Remove look" title="Remove look" onClick="{{v.clearLook}}" disabled="{{v.noLook}}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
+            <input class="rng" type="range" min="0" max="150" step="1" aria-label="Look amount" disabled="{{v.noLook}}" value="{{v.amount}}" style="{{v.amountStyle}}" onChange="{{v.onAmount}}" onDoubleClick="{{v.resetAmount}}">
+          </div>
+        </sc-if>
+      </div>
+      <div class="scroll">
+        <sc-for list="{{v.sections}}" as="s" hint-placeholder-count="2">
+          <section class="lsec">
+            <h3>{{s.title}}</h3>
+            <p>{{s.note}}</p>
+            <div class="grid2">
+              <sc-for list="{{s.looks}}" as="l" hint-placeholder-count="4">
+                <div class="card {{l.cls}}" onMouseEnter="{{l.enter}}" onMouseLeave="{{l.leave}}">
+                  <button class="cbtn" onClick="{{l.pick}}" aria-pressed="{{l.on}}" aria-label="{{l.aria}}">
+                    <span class="th">
+                      <sc-if value="{{l.hasThumb}}" hint-placeholder-val="{{false}}"><img src="{{l.thumb}}" alt=""></sc-if>
+                      <sc-if value="{{l.noThumb}}" hint-placeholder-val="{{true}}"><span class="shimmer"></span></sc-if>
+                    </span>
+                    <span class="nm">{{l.name}}</span>
+                    <span class="sb">{{l.sub}}</span>
+                  </button>
+                  <button class="fav {{l.favCls}}" aria-label="{{l.favAria}}" onClick="{{l.toggleFav}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></button>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+        </sc-for>
+        <sc-if value="{{v.noResults}}" hint-placeholder-val="{{false}}"><p class="foot">{{v.noResultsText}}</p></sc-if>
+        <div class="phead" style="border-bottom: 0; border-top: 1px solid var(--border); margin-top: 12px">
+          <b style="font-size: 13px">My Looks</b>
+          <p class="hint" style="margin: 0">Save the current look and your adjustments to reuse on any photo.</p>
+          <sc-if value="{{v.saving}}" hint-placeholder-val="{{false}}">
+            <div class="prow"><input class="txt" type="text" placeholder="Look name" aria-label="Look name" value="{{v.saveName}}" onChange="{{v.onSaveName}}" onKeyDown="{{v.onSaveKey}}"><button class="btn btn-primary btn-sm" onClick="{{v.confirmSave}}">Save</button></div>
+          </sc-if>
+          <div class="prow" style="flex-wrap: wrap">
+            <button class="btn btn-outline btn-sm" onClick="{{v.startSave}}" disabled="{{v.noPhoto}}">Save Current</button>
+            <button class="btn btn-ghost btn-sm" onClick="{{v.importLooks}}">Import</button>
+            <button class="btn btn-ghost btn-sm" onClick="{{v.exportLooks}}" disabled="{{v.noCustom}}">Export</button>
+          </div>
+        </div>
+        <p class="foot">Looks are emulations made for this app. Camera and film names describe the style and don't imply any affiliation.</p>
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div class="viewer {{v.dragCls}}" ref="{{v.refViewer}}" onPointerDown="{{v.vDown}}" onPointerMove="{{v.vMove}}" onPointerUp="{{v.vUp}}" onPointerCancel="{{v.vUp}}" onWheel="{{v.vWheel}}" onDoubleClick="{{v.vDbl}}" onDragOver="{{v.onDragOver}}" onDragLeave="{{v.onDragLeave}}" onDrop="{{v.onDrop}}">
+        <canvas class="display {{v.displayCls}}" ref="{{v.refDisplay}}" aria-label="{{v.canvasAria}}" role="img"></canvas>
+        <sc-if value="{{v.isSplit}}" hint-placeholder-val="{{false}}"><div class="splitbar" style="{{v.splitStyle}}"><i></i></div><span class="vtag" style="{{v.tagL}}">EDITED</span><span class="vtag" style="{{v.tagR}}">ORIGINAL</span></sc-if>
+        <sc-if value="{{v.isBefore}}" hint-placeholder-val="{{false}}"><span class="vtag" style="left: 12px">ORIGINAL</span></sc-if>
+        <sc-if value="{{v.noPhoto}}" hint-placeholder-val="{{true}}">
+          <div class="empty">
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M7 3v18"></path><path d="M3 7.5h4"></path><path d="M3 12h18"></path><path d="M3 16.5h4"></path><path d="M17 3v18"></path><path d="M17 7.5h4"></path><path d="M17 16.5h4"></path></svg></div>
+            <h2>Develop Your Roll</h2>
+            <p>Drop a shoot here or choose photos. JPEG, PNG, WEBP and the previews inside Fujifilm, Sony, Canon and Nikon RAW files all work.</p>
+            <p>Everything is processed on this device. Nothing is uploaded.</p>
+            <div class="prow">
+              <button class="btn btn-primary" onClick="{{v.pickFiles}}">Choose Photos</button>
+              <button class="btn btn-outline" onClick="{{v.openChart}}">Open Test Chart</button>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{v.showVbar}}" hint-placeholder-val="{{false}}">
+          <div class="vbar" role="group" aria-label="View">
+            <button class="btn btn-ghost {{v.vEdit}}" onClick="{{v.setEdit}}" aria-pressed="{{v.pEdit}}">Edited</button>
+            <button class="btn btn-ghost {{v.vSplit}}" onClick="{{v.setSplit}}" aria-pressed="{{v.pSplit}}">Split</button>
+            <button class="btn btn-ghost {{v.vBefore}}" onClick="{{v.setBefore}}" aria-pressed="{{v.pBefore}}">Original</button>
+            <button class="btn btn-ghost" onClick="{{v.cycleZoom}}" aria-label="Zoom">{{v.zoomLabel}}</button>
+          </div>
+        </sc-if>
+        <sc-if value="{{v.busy}}" hint-placeholder-val="{{false}}">
+          <div class="busy"><div class="box"><span>{{v.busyText}}</span><div class="prog"><i style="{{v.progStyle}}"></i></div></div></div>
+        </sc-if>
+      </div>
+      <sc-if value="{{v.hasPhoto}}" hint-placeholder-val="{{false}}">
+        <div class="strip">
+          <div class="strip-list" role="listbox" aria-label="Roll">
+            <sc-for list="{{v.photos}}" as="p" hint-placeholder-count="4">
+              <button class="strip-item {{p.cls}}" role="option" aria-selected="{{p.on}}" aria-label="{{p.aria}}" onClick="{{p.pick}}"><img src="{{p.thumb}}" alt=""><span class="n">{{p.n}}</span><sc-if value="{{p.edited}}" hint-placeholder-val="{{false}}"><span class="dot"></span></sc-if></button>
+            </sc-for>
+            <button class="strip-add" aria-label="Add photos" onClick="{{v.pickFiles}}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></button>
+          </div>
+          <div class="acts dsk">
+            <button class="btn btn-ghost btn-sm" onClick="{{v.syncAll}}" disabled="{{v.single}}" title="Copy this photo's look and adjustments to the whole roll">Sync to Roll</button>
+            <button class="btn btn-ghost btn-icon btn-sm" aria-label="Remove photo from roll" title="Remove from roll" onClick="{{v.removePhoto}}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg></button>
+          </div>
+        </div>
+      </sc-if>
+    </section>
+
+    <aside class="panel insp {{v.inspCls}}" aria-label="Inspector">
+      <div class="itabs">
+        <div class="seg full" role="tablist" aria-label="Inspector">
+          <button role="tab" class="{{v.tDev}}" aria-selected="{{v.sDev}}" onClick="{{v.tabDev}}">Develop</button>
+          <button role="tab" class="{{v.tFrame}}" aria-selected="{{v.sFrame}}" onClick="{{v.tabFrame}}">Frame</button>
+          <button role="tab" class="{{v.tExp}}" aria-selected="{{v.sExp}}" onClick="{{v.tabExp}}">Export</button>
+        </div>
+      </div>
+      <div class="scroll">
+        <sc-if value="{{v.isDev}}" hint-placeholder-val="{{true}}">
+          <div class="hist {{v.devOnlyCls}}"><canvas ref="{{v.refHist}}" width="320" height="72" aria-label="Histogram" role="img"></canvas><span>{{v.exifLine}}</span></div>
+          <div class="qa {{v.devOnlyCls}}">
+            <button class="btn btn-secondary btn-sm" onClick="{{v.auto}}" disabled="{{v.noPhoto}}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"></path></svg>Auto</button>
+            <button class="btn btn-ghost btn-sm" onClick="{{v.copy}}" disabled="{{v.noPhoto}}">Copy</button>
+            <button class="btn btn-ghost btn-sm" onClick="{{v.paste}}" disabled="{{v.noClip}}">Paste</button>
+            <button class="btn btn-ghost btn-sm" onClick="{{v.resetAll}}" disabled="{{v.noPhoto}}">Reset</button>
+          </div>
+          <sc-for list="{{v.devSecs}}" as="sec" hint-placeholder-count="6">
+            <div class="sec">
+              <button class="sechd {{sec.hdCls}}" aria-expanded="{{sec.open}}" onClick="{{sec.toggle}}">{{sec.title}}<span class="badge">{{sec.badge}}</span><svg class="i chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+              <sc-if value="{{sec.open}}" hint-placeholder-val="{{false}}">
+                <div class="secbd">
+                  <sc-if value="{{sec.isCurve}}" hint-placeholder-val="{{false}}">
+                    <div class="seg full" role="tablist" aria-label="Curve channel">
+                      <sc-for list="{{v.curveTabs}}" as="t" hint-placeholder-count="4"><button role="tab" class="{{t.cls}}" aria-selected="{{t.on}}" onClick="{{t.pick}}">{{t.label}}</button></sc-for>
+                    </div>
+                    <div class="curvebox" onPointerDown="{{v.cDown}}" onPointerMove="{{v.cMove}}" onPointerUp="{{v.cUp}}" onPointerCancel="{{v.cUp}}" onDoubleClick="{{v.cDbl}}">
+                      <svg viewBox="0 0 256 256" preserveAspectRatio="none" aria-label="Tone curve" role="img">
+                        <path d="M64 0V256M128 0V256M192 0V256M0 64H256M0 128H256M0 192H256" stroke="rgba(255,255,255,0.08)" stroke-width="1" fill="none"></path>
+                        <path d="M0 256L256 0" stroke="rgba(255,255,255,0.18)" stroke-width="1" stroke-dasharray="4 4" fill="none"></path>
+                        <path d="{{v.curvePath}}" stroke="{{v.curveColor}}" stroke-width="2" fill="none" vector-effect="non-scaling-stroke"></path>
+                        <path d="{{v.curveDots}}" fill="{{v.curveColor}}" stroke="#111" stroke-width="1"></path>
+                      </svg>
+                    </div>
+                    <p class="hint">Click to add a point, drag to shape, double-click a point to remove it.</p>
+                  </sc-if>
+                  <sc-if value="{{sec.isMixer}}" hint-placeholder-val="{{false}}">
+                    <div class="seg full" role="tablist" aria-label="Mixer">
+                      <sc-for list="{{v.mixTabs}}" as="t" hint-placeholder-count="4"><button role="tab" class="{{t.cls}}" aria-selected="{{t.on}}" onClick="{{t.pick}}">{{t.label}}</button></sc-for>
+                    </div>
+                    <sc-if value="{{v.isBwTab}}" hint-placeholder-val="{{false}}">
+                      <div class="switch"><span>Black &amp; White</span><button class="sw-btn {{v.monoCls}}" role="switch" aria-checked="{{v.monoOn}}" aria-label="Black and white" onClick="{{v.toggleMono}}"><i></i></button></div>
+                    </sc-if>
+                  </sc-if>
+                  <sc-if value="{{sec.isGrade}}" hint-placeholder-val="{{false}}">
+                    <div class="wheels">
+                      <sc-for list="{{v.wheels}}" as="w" hint-placeholder-count="4">
+                        <div class="wcell">
+                          <b>{{w.label}}</b>
+                          <div class="wheel" onPointerDown="{{w.down}}" onPointerMove="{{w.move}}" onPointerUp="{{w.up}}" onDoubleClick="{{w.reset}}" role="img" aria-label="{{w.aria}}"><span class="puck" style="{{w.puck}}"></span></div>
+                          <span class="wval">{{w.val}}</span>
+                          <input class="rng" type="range" min="-100" max="100" step="1" aria-label="{{w.lumAria}}" value="{{w.lum}}" style="{{w.lumStyle}}" onChange="{{w.onLum}}" onDoubleClick="{{w.resetLum}}">
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{sec.isCrop}}" hint-placeholder-val="{{false}}">
+                    <div class="sub">Aspect Ratio</div>
+                    <div class="chipset"><sc-for list="{{v.aspects}}" as="a" hint-placeholder-count="8"><button class="chip {{a.cls}}" aria-pressed="{{a.on}}" onClick="{{a.pick}}">{{a.label}}</button></sc-for></div>
+                    <div class="row2">
+                      <button class="btn btn-outline btn-sm" onClick="{{v.rotL}}" aria-label="Rotate left"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg></button>
+                      <button class="btn btn-outline btn-sm" onClick="{{v.rotR}}" aria-label="Rotate right"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path></svg></button>
+                      <button class="btn btn-outline btn-sm {{v.flipHCls}}" onClick="{{v.flipH}}" aria-label="Flip horizontal" aria-pressed="{{v.flipHOn}}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h3"></path><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"></path><path d="M12 20v2"></path><path d="M12 14v2"></path><path d="M12 8v2"></path><path d="M12 2v2"></path></svg></button>
+                      <button class="btn btn-outline btn-sm {{v.flipVCls}}" onClick="{{v.flipV}}" aria-label="Flip vertical" aria-pressed="{{v.flipVOn}}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v3"></path><path d="M21 16v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3"></path><path d="M4 12H2"></path><path d="M10 12H8"></path><path d="M16 12h-2"></path><path d="M22 12h-2"></path></svg></button>
+                    </div>
+                    <p class="hint">Drag the photo to reposition the crop.</p>
+                  </sc-if>
+                  <sc-if value="{{sec.isFrame}}" hint-placeholder-val="{{false}}">
+                    <div class="ftypes"><sc-for list="{{v.ftypes}}" as="f" hint-placeholder-count="9"><button class="ftype {{f.cls}}" aria-pressed="{{f.on}}" onClick="{{f.pick}}"><span class="fprev" style="{{f.box}}"><i class="{{f.innerCls}}" style="{{f.inner}}"></i></span>{{f.label}}</button></sc-for></div>
+                    <sc-if value="{{v.frameColors}}" hint-placeholder-val="{{false}}">
+                      <div class="sub">Frame Color</div>
+                      <div class="swatches"><sc-for list="{{v.swatches}}" as="c" hint-placeholder-count="6"><button class="sw {{c.cls}}" style="{{c.style}}" aria-label="{{c.label}}" aria-pressed="{{c.on}}" onClick="{{c.pick}}"></button></sc-for><input class="sw-pick" type="color" aria-label="Custom frame color" value="{{v.frameColor}}" onChange="{{v.onFrameColor}}"></div>
+                    </sc-if>
+                    <sc-if value="{{v.hasCaption}}" hint-placeholder-val="{{false}}">
+                      <label class="field"><span>Caption</span><input class="txt" type="text" placeholder="Summer '26, Montauk" value="{{v.caption}}" onChange="{{v.onCaption}}"></label>
+                      <div class="seg full" role="group" aria-label="Caption style"><button class="{{v.fHand}}" onClick="{{v.setHand}}">Handwritten</button><button class="{{v.fClean}}" onClick="{{v.setClean}}">Clean</button></div>
+                    </sc-if>
+                    <sc-if value="{{v.isStrip}}" hint-placeholder-val="{{false}}">
+                      <label class="field"><span>Edge Print</span><input class="txt" type="text" value="{{v.edge}}" onChange="{{v.onEdge}}" aria-label="Edge print text"></label>
+                    </sc-if>
+                    <sc-if value="{{v.hasKeyline}}" hint-placeholder-val="{{false}}">
+                      <div class="switch"><span>Keyline</span><button class="sw-btn {{v.keyCls}}" role="switch" aria-checked="{{v.keyOn}}" aria-label="Keyline" onClick="{{v.toggleKey}}"><i></i></button></div>
+                    </sc-if>
+                  </sc-if>
+                  <sc-if value="{{sec.isStamp}}" hint-placeholder-val="{{false}}">
+                    <div class="switch"><span>Show Date Stamp</span><button class="sw-btn {{v.stampCls}}" role="switch" aria-checked="{{v.stampOn}}" aria-label="Date stamp" onClick="{{v.toggleStamp}}"><i></i></button></div>
+                    <div class="seg full" role="group" aria-label="Stamp style"><sc-for list="{{v.stampStyles}}" as="t" hint-placeholder-count="3"><button class="{{t.cls}}" aria-pressed="{{t.on}}" onClick="{{t.pick}}">{{t.label}}</button></sc-for></div>
+                    <label class="field"><span>Date</span><input class="txt" type="date" value="{{v.stampDate}}" onChange="{{v.onStampDate}}"></label>
+                    <sc-if value="{{v.stampLcd}}" hint-placeholder-val="{{true}}">
+                      <div class="sub">Format</div>
+                      <div class="chipset"><sc-for list="{{v.stampFmts}}" as="t" hint-placeholder-count="5"><button class="chip {{t.cls}}" aria-pressed="{{t.on}}" onClick="{{t.pick}}">{{t.label}}</button></sc-for></div>
+                      <div class="sub">Color</div>
+                      <div class="swatches"><sc-for list="{{v.stampColors}}" as="c" hint-placeholder-count="4"><button class="sw {{c.cls}}" style="{{c.style}}" aria-label="{{c.label}}" aria-pressed="{{c.on}}" onClick="{{c.pick}}"></button></sc-for></div>
+                      <div class="seg full" role="group" aria-label="Stamp position" style="margin-top: 6px"><button class="{{v.posBL}}" onClick="{{v.setBL}}">Bottom Left</button><button class="{{v.posBR}}" onClick="{{v.setBR}}">Bottom Right</button></div>
+                    </sc-if>
+                  </sc-if>
+                  <sc-if value="{{sec.isRetro}}" hint-placeholder-val="{{false}}">
+                    <button class="btn btn-outline btn-sm" style="margin-bottom: 6px" onClick="{{v.reseed}}">New Random Seed</button>
+                  </sc-if>
+                  <sc-for list="{{sec.rows}}" as="s" hint-placeholder-count="4">
+                    <sc-if value="{{s.head}}" hint-placeholder-val="{{false}}"><div class="sub">{{s.label}}</div></sc-if>
+                    <sc-if value="{{s.slider}}" hint-placeholder-val="{{true}}">
+                      <div class="srow {{s.cls}}">
+                        <label for="{{s.id}}" onDoubleClick="{{s.reset}}" title="Double-click to reset">{{s.label}}</label>
+                        <input class="rng" id="{{s.id}}" type="range" min="{{s.min}}" max="{{s.max}}" step="{{s.step}}" value="{{s.value}}" style="{{s.style}}" onChange="{{s.onChange}}" onDoubleClick="{{s.reset}}">
+                        <span class="sval" onDoubleClick="{{s.reset}}">{{s.display}}</span>
+                      </div>
+                    </sc-if>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </sc-if>
+        <sc-if value="{{v.isExp}}" hint-placeholder-val="{{false}}">
+          <div class="secbd" style="padding-top: 16px">
+            <h3 style="font-size: 16px">Export</h3>
+            <div class="outsum"><span>Photo</span><b>{{v.expName}}</b><span>Output</span><b>{{v.expDims}}</b><span>Frame</span><b>{{v.expFrame}}</b></div>
+            <div class="sub">Format</div>
+            <div class="seg full" role="group" aria-label="Format"><sc-for list="{{v.formats}}" as="f" hint-placeholder-count="3"><button class="{{f.cls}}" aria-pressed="{{f.on}}" onClick="{{f.pick}}">{{f.label}}</button></sc-for></div>
+            <div class="sub">Size (long edge)</div>
+            <div class="seg full" role="group" aria-label="Size"><sc-for list="{{v.sizes}}" as="f" hint-placeholder-count="4"><button class="{{f.cls}}" aria-pressed="{{f.on}}" onClick="{{f.pick}}">{{f.label}}</button></sc-for></div>
+            <sc-if value="{{v.hasQuality}}" hint-placeholder-val="{{true}}">
+              <div class="sub">Quality</div>
+              <div class="srow"><label for="q-rng">Quality</label><input class="rng" id="q-rng" type="range" min="60" max="100" step="1" value="{{v.quality}}" style="{{v.qualityStyle}}" onChange="{{v.onQuality}}"><span class="sval">{{v.quality}}</span></div>
+            </sc-if>
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px">
+              <button class="btn btn-primary btn-block" onClick="{{v.exportOne}}" disabled="{{v.noPhoto}}">Export Photo</button>
+              <button class="btn btn-outline btn-block" onClick="{{v.exportAll}}" disabled="{{v.single}}">{{v.exportAllLabel}}</button>
+            </div>
+            <p class="note">Exports are rendered at full resolution on this device, then offered as a download. From the preview you can also share straight to Messages, AirDrop or Mail where your device supports it.</p>
+          </div>
+        </sc-if>
+      </div>
+    </aside>
+  </main>
+
+  <nav class="mtabs" aria-label="Sections">
+    <sc-for list="{{v.mtabs}}" as="t" hint-placeholder-count="4">
+      <button class="{{t.cls}}" aria-pressed="{{t.on}}" onClick="{{t.pick}}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{t.icon}}"></path></svg>{{t.label}}</button>
+    </sc-for>
+  </nav>
+
+  <input class="hide" type="file" multiple="" accept="image/*,.raf,.arw,.nef,.nrw,.cr2,.dng,.orf,.rw2,.pef" ref="{{v.refFile}}" onChange="{{v.onFiles}}" aria-label="Choose photos">
+  <input class="hide" type="file" accept=".json,application/json" ref="{{v.refLookFile}}" onChange="{{v.onLookFile}}" aria-label="Import looks">
+
+  <sc-if value="{{v.toast}}" hint-placeholder-val="{{false}}"><div class="toast {{v.toastCls}}" role="status"><i></i><span>{{v.toastText}}</span></div></sc-if>
+
+  <sc-if value="{{v.result}}" hint-placeholder-val="{{false}}">
+    <div class="modal">
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="Export ready">
+        <h2>{{v.resTitle}}</h2>
+        <sc-if value="{{v.resImg}}" hint-placeholder-val="{{false}}"><img src="{{v.resUrl}}" alt="Exported photo"></sc-if>
+        <p>{{v.resInfo}}</p>
+        <p>{{v.resHint}}</p>
+        <div class="prow">
+          <button class="btn btn-ghost" onClick="{{v.closeResult}}">Close</button>
+          <sc-if value="{{v.canShare}}" hint-placeholder-val="{{false}}"><button class="btn btn-outline" onClick="{{v.shareResult}}">Share</button></sc-if>
+          <button class="btn btn-primary" onClick="{{v.saveResult}}">Save File</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</template>
+
+<script src="./darkroom-engine.js"></script>
+<script src="./darkroom-looks.js"></script>
+<script src="./darkroom-ui.js"></script>
+<script src="./app.js"></script>
+<script>DarkroomUI.mount(document.getElementById('dc-root'), Component, document.getElementById('dc-template'));</script>
+</body>
+</html>

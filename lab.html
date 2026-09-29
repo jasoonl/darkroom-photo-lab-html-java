@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Darkroom Test Bench</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@700&family=Inter:wght@400;500;600&display=swap">
+<style>
+:root{--bg:oklch(0.141 0.005 285.823);--fg:oklch(0.85 0.005 65);--card:oklch(0.21 0.006 285.885);--muted:oklch(0.705 0.015 286.067);--border:rgba(255,255,255,.1);--primary:oklch(0.488 0.243 264.376);--warn:#FBBF24;--err:#F87171;--ok:#4ADE80;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/20px Inter,system-ui,sans-serif;padding:24px 16px 64px}
+main{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:24px}
+h1,h2{font-family:Geist,Inter,sans-serif;letter-spacing:-.02em;margin:0}
+h1{font-size:30px;line-height:36px}h2{font-size:20px;line-height:28px}
+p{margin:0;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14.4px;padding:24px;display:flex;flex-direction:column;gap:12px}
+.prog{height:6px;border-radius:9999px;background:rgba(255,255,255,.08);overflow:hidden}.prog i{display:block;height:100%;width:0;background:var(--primary);transition:width .2s}
+table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
+th{color:var(--muted);font-weight:500}
+td.w{color:var(--warn)}td.e{color:var(--err)}
+.scroll{overflow-x:auto}
+canvas{max-width:100%;height:auto;border-radius:8.4px;display:block}
+.credits{font-size:12px;line-height:18px;color:var(--muted);columns:2 320px}
+.credits a{color:var(--fg)}
+</style>
+</head>
+<body>
+<main>
+  <header style="display:flex;flex-direction:column;gap:6px">
+    <h1>Darkroom Test Bench</h1>
+    <p>Every look, run on openly licensed photos from Wikimedia Commons. Nothing here is uploaded: photos load straight from Commons into this page and are developed on your GPU.</p>
+  </header>
+  <section class="card"><b id="status">Starting</b><div class="prog"><i id="bar"></i></div></section>
+  <section class="card"><h2>Flags</h2><p>Looks whose behaviour on real photos needs attention. Thresholds: over 3% of a photo's detailed pixels pushed to pure white or black, skin hue moved more than 12&deg;, average brightness moved more than 0.15, neutrals tinted more than intended.</p><div class="scroll" id="flags"></div></section>
+  <section class="card"><h2>Contact Sheets</h2><p>Each row is one photo: the original, then the focus looks.</p><div id="sheets" style="display:flex;flex-direction:column;gap:16px"></div></section>
+  <section class="card"><h2>All Looks</h2><div class="scroll" id="table"></div></section>
+  <section class="card"><h2>Photo Credits</h2><div class="credits" id="credits"></div></section>
+</main>
+<script src="/darkroom-engine.js"></script>
+<script src="/darkroom-looks.js"></script>
+<script>
+(async function () {
+  const D = window.Darkroom, $ = (id) => document.getElementById(id);
+  const qs = new URLSearchParams(location.search);
+  const PER = +(qs.get('per') || 4), TW = 240;
+  const API = 'https://commons.wikimedia.org/w/api.php?format=json&origin=*&';
+  const status = (t, f) => { $('status').textContent = t; if (f != null) $('bar').style.width = (f * 100).toFixed(1) + '%'; };
+  const SOURCES = [
+    { label: 'Fujifilm X100VI', cat: 'Taken with Fujifilm X100VI', find: 'Taken with Fujifilm X100VI' },
+    { label: 'Fujifilm X100V', cat: 'Taken with Fujifilm X100V', find: 'Taken with Fujifilm X100V' },
+    { label: 'Fujifilm X-T5', cat: 'Taken with Fujifilm X-T5', find: 'Taken with Fujifilm X-T5' },
+    { label: 'Sony a7 IV', cat: null, find: 'Taken with Sony ILCE-7M4' },
+    { label: 'Sony a7 III', cat: null, find: ['ILCE-7M3', 'Sony α7 III', 'Sony A7 III'] },
+    { label: 'Portraits', cat: 'Featured pictures of people', find: null },
+    { label: 'Landscapes', cat: 'Featured pictures of landscapes', find: null },
+    { label: 'Night', cat: null, find: ['Featured pictures of night', 'Quality images of night', 'Night photographs', 'Night photography'] }
+  ];
+  const FOCUS = ['fuji-provia', 'fuji-classic-chrome', 'fuji-classic-neg', 'fuji-nostalgic-neg', 'fuji-acros-ye', 'sony-fl', 'sony-in', 'kodak-portra-400', 'cinestill-800t', 'polaroid-600', 'disposable-flash'];
+  const j = async (q) => (await fetch(API + q)).json();
+  async function resolveCats(s) {
+    if (s.cat) return ['Category:' + s.cat];
+    const out = [];
+    for (const f of [].concat(s.find)) {
+      const r = await j('action=query&list=search&srnamespace=14&srlimit=4&srsearch=' + encodeURIComponent('intitle:"' + f + '"'));
+      (r.query && r.query.search || []).forEach((h) => out.push(h.title));
+    }
+    return out;
+  }
+  async function files(cat, n) {
+    const q = 'action=query&generator=categorymembers&gcmtype=file&gcmsort=timestamp&gcmdir=desc&gcmlimit=40&gcmtitle=' + encodeURIComponent(cat) +
+      '&prop=imageinfo&iiprop=url|size|mime|extmetadata&iiurlwidth=1280&iiextmetadatafilter=Artist|LicenseShortName|LicenseUrl|ObjectName';
+    const r = await j(q);
+    const pages = Object.values((r.query && r.query.pages) || {});
+    return pages.map((p) => ({ title: p.title, ii: p.imageinfo && p.imageinfo[0] }))
+      .filter((x) => x.ii && x.ii.mime === 'image/jpeg' && x.ii.width >= 1600 && x.ii.thumburl)
+      .slice(0, n);
+  }
+  const strip = (h) => { const d = document.createElement('div'); d.innerHTML = h || ''; return (d.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80); };
+
+  // detail lost: pixels that had detail in the original and end up at pure white or black
+  function lost(o, im) {
+    const a = o.data, d = im.data, n = d.length / 4; let hi = 0, lo = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const oL = 0.2126 * a[i] + 0.7152 * a[i + 1] + 0.0722 * a[i + 2], oM = Math.max(a[i], a[i + 1], a[i + 2]);
+      const L = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2], M = Math.max(d[i], d[i + 1], d[i + 2]);
+      if (oM < 245 && M >= 254 && L > 200) hi++;
+      if (oL >= 10 && L <= 3) lo++;
+    }
+    return { hi: hi / n, lo: lo / n };
+  }
+  // pixel metrics
+  function metrics(img) {
+    const d = img.data, n = d.length / 4; let L = 0, hi = 0, lo = 0, nN = 0, nC = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i + 1], b = d[i + 2], l = 0.2126 * r + 0.7152 * g + 0.0722 * b; L += l;
+      if (Math.max(r, g, b) >= 254 && l > 200) hi++; if (l <= 3) lo++;
+    }
+    return { L: L / n / 255, hi: hi / n, lo: lo / n };
+  }
+  function hueOf(r, g, b) { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), c = mx - mn; if (!c) return [0, 0]; let h; if (mx === r) h = ((g - b) / c) % 6; else if (mx === g) h = (b - r) / c + 2; else h = (r - g) / c + 4; return [(h * 60 + 360) % 360, c / mx]; }
+  function masks(img) {
+    const d = img.data, skin = [], neut = [];
+    for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+      const r = d[i], g = d[i + 1], b = d[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      if (r > 95 && g > 40 && b > 20 && mx - mn > 15 && Math.abs(r - g) > 15 && r > g && r > b && r < 250) skin.push(p);
+      else if (mx - mn < 8 && mx > 40 && mx < 230) neut.push(p);
+    }
+    return { skin, neut };
+  }
+  function regionStats(img, idx) {
+    if (idx.length < 150) return null;
+    const d = img.data; let sx = 0, sy = 0, ss = 0, ch = 0;
+    for (const p of idx) { const i = p * 4, r = d[i], g = d[i + 1], b = d[i + 2]; const [h, s] = hueOf(r, g, b); sx += Math.cos(h * Math.PI / 180) * s; sy += Math.sin(h * Math.PI / 180) * s; ss += s; ch += Math.max(r, g, b) - Math.min(r, g, b); }
+    return { hue: (Math.atan2(sy, sx) * 180 / Math.PI + 360) % 360, sat: ss / idx.length, chroma: ch / idx.length };
+  }
+  const dh = (a, b) => { let x = b - a; while (x > 180) x -= 360; while (x < -180) x += 360; return x; };
+
+  // collect photos
+  status('Finding photos on Wikimedia Commons', 0);
+  const photos = [];
+  for (const s of SOURCES) {
+    try {
+      for (const cat of await resolveCats(s)) {
+        const got = await files(cat, PER);
+        if (got.length >= 2) { got.forEach((f) => photos.push(Object.assign(f, { group: s.label, cat }))); break; }
+      }
+    } catch (e) { console.warn(s.label, e); }
+  }
+  if (!photos.length) { status('Could not reach Wikimedia Commons from this browser.', 0); return; }
+  $('credits').innerHTML = photos.map((p, i) => { const m = p.ii.extmetadata || {}; return '<div>' + (i + 1) + '. <a href="' + p.ii.descriptionurl + '" target="_blank" rel="noopener">' + strip((m.ObjectName || {}).value || p.title.replace(/^File:/, '')) + '</a> by ' + strip((m.Artist || {}).value || 'unknown') + ', <a href="' + ((m.LicenseUrl || {}).value || p.ii.descriptionurl) + '" target="_blank" rel="noopener">' + strip((m.LicenseShortName || {}).value || 'see file page') + '</a> (' + p.group + ')</div>'; }).join('');
+
+  const R = D.createRenderer();
+  const looks = D.LOOKS;
+  const agg = {}; looks.forEach((l) => { agg[l.id] = { dL: [], hi: 0, lo: 0, skin: [], sat: [], neut: [], n: 0 }; });
+  const results = { photos: photos.length, perPhoto: [] };
+  for (let pi = 0; pi < photos.length; pi++) {
+    const p = photos[pi];
+    status('Developing photo ' + (pi + 1) + ' of ' + photos.length + ' (' + p.group + ')', pi / photos.length);
+    let bmp;
+    try { const blob = await (await fetch(p.ii.thumburl)).blob(); bmp = await createImageBitmap(blob); } catch (e) { console.warn('load', p.title, e); continue; }
+    R.setSource(bmp);
+    const A = bmp.width / bmp.height, w = A >= 1 ? 256 : Math.round(256 * A), h = A >= 1 ? Math.round(256 / A) : 256;
+    const base = D.newEdit(); base.seed = 0.37;
+    const o = R.renderPixels(base, w, h, { bypass: true }), om = metrics(o), mk = masks(o), oSkin = regionStats(o, mk.skin), oNeut = regionStats(o, mk.neut);
+    const row = { title: p.title, group: p.group, skinPx: mk.skin.length };
+    for (const l of looks) {
+      const e = D.newEdit(); e.seed = 0.37; e.look = l.id; for (const k in l.fx) e.p[k] = l.fx[k];
+      const im = R.renderPixels(e, w, h, {}), m = metrics(im), a = agg[l.id], x = lost(o, im);
+      a.n++; a.dL.push(m.L - om.L); a.hi = Math.max(a.hi, x.hi); a.lo = Math.max(a.lo, x.lo);
+      if (oSkin && !(l.p && l.p.mono)) { const s = regionStats(im, mk.skin); if (s) { a.skin.push(dh(oSkin.hue, s.hue)); a.sat.push(s.sat / Math.max(0.01, oSkin.sat)); } }
+      if (oNeut) { const s = regionStats(im, mk.neut); if (s) a.neut.push(s.chroma - oNeut.chroma); }
+    }
+    // contact sheet row
+    const tw = TW, th = Math.round(tw / A), cv = document.createElement('canvas');
+    const cols = FOCUS.length + 1; cv.width = cols * (tw + 6); cv.height = th + 22;
+    const cx = cv.getContext('2d'); cx.fillStyle = '#18181b'; cx.fillRect(0, 0, cv.width, cv.height); cx.font = '12px Inter, sans-serif';
+    ['original'].concat(FOCUS).forEach((id, k) => {
+      const e = D.newEdit(); e.seed = 0.37; let img;
+      if (id === 'original') img = R.renderPixels(e, tw, th, { bypass: true });
+      else { const l = D.lookById(id); e.look = id; for (const q in l.fx) e.p[q] = l.fx[q]; img = R.renderPixels(e, tw, th, {}); }
+      cx.putImageData(img, k * (tw + 6), 0); cx.fillStyle = '#d4d4d8'; cx.fillText(id === 'original' ? (pi + 1) + '. ' + p.group : D.lookById(id).name, k * (tw + 6) + 2, th + 15);
+    });
+    const wrap = document.createElement('div'); wrap.className = 'scroll'; wrap.appendChild(cv); $('sheets').appendChild(wrap);
+    results.perPhoto.push(row);
+    if (bmp.close) bmp.close();
+    await new Promise((r) => setTimeout(r, 0));
+  }
+  // aggregate
+  const mean = (a) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : null);
+  const absmax = (a) => (a.length ? a.reduce((m, x) => (Math.abs(x) > Math.abs(m) ? x : m), 0) : null);
+  const rows = looks.map((l) => {
+    const a = agg[l.id];
+    const r = { id: l.id, name: l.name, cat: l.cat, dL: mean(a.dL), dLmax: absmax(a.dL), hi: a.hi, lo: a.lo, skin: mean(a.skin), skinMax: absmax(a.skin), sat: mean(a.sat), neut: mean(a.neut) };
+    r.flags = [];
+    if (r.hi > 0.03) r.flags.push('highlight clipping +' + (r.hi * 100).toFixed(1) + '%');
+    if (r.lo > 0.03) r.flags.push('shadow crushing +' + (r.lo * 100).toFixed(1) + '%');
+    const tinted = r.neut != null && r.neut > 15;
+    if (r.skin != null && !tinted && Math.abs(r.skin) > 12) r.flags.push('skin hue ' + (r.skin > 0 ? '+' : '') + r.skin.toFixed(0) + '°');
+    if (r.sat != null && !tinted && (r.sat > 1.45 || r.sat < 0.45) && !l.p.mono) r.flags.push('skin saturation ×' + r.sat.toFixed(2));
+    if (Math.abs(r.dLmax) > 0.15) r.flags.push('brightness ' + (r.dLmax > 0 ? '+' : '') + r.dLmax.toFixed(2) + ' on one photo');
+    return r;
+  });
+  results.looks = rows;
+  const f2 = (x, d) => (x == null ? '—' : (x > 0 ? '+' : '') + x.toFixed(d));
+  const tr = (r) => '<tr><td>' + r.name + '</td><td>' + r.cat + '</td><td>' + f2(r.dL, 3) + '</td><td class="' + (r.hi > 0.03 ? 'e' : '') + '">' + (r.hi * 100).toFixed(1) + '%</td><td class="' + (r.lo > 0.03 ? 'e' : '') + '">' + (r.lo * 100).toFixed(1) + '%</td><td class="' + (r.skin != null && Math.abs(r.skin) > 12 ? 'w' : '') + '">' + f2(r.skin, 1) + '</td><td>' + (r.sat == null ? '—' : '×' + r.sat.toFixed(2)) + '</td><td>' + f2(r.neut, 1) + '</td><td class="w">' + r.flags.join('; ') + '</td></tr>';
+  const thead = '<tr><th>Look</th><th>Group</th><th>Avg Δ brightness</th><th>Highlight detail lost</th><th>Shadow detail lost</th><th>Skin Δ hue</th><th>Skin sat</th><th>Neutral Δ chroma</th><th>Flags</th></tr>';
+  const flagged = rows.filter((r) => r.flags.length);
+  $('flags').innerHTML = flagged.length ? '<table>' + thead + flagged.map(tr).join('') + '</table>' : '<p>No look crossed a threshold.</p>';
+  $('table').innerHTML = '<table>' + thead + rows.map(tr).join('') + '</table>';
+  window.__bench = results;
+  status('Done: ' + looks.length + ' looks on ' + results.perPhoto.length + ' photos, ' + flagged.length + ' flagged', 1);
+})();
+</script>
+</body>
+</html>
